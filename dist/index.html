@@ -3,27 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Eesti ametliku aadressi ja koordinaatide otsing Maa- ja Ruumiameti In-AKS teenusest."
-    />
+    <meta name="description" content="Eesti aadressi praegune ilm ja asukoht kaardil." />
     <meta name="theme-color" content="#10253f" />
     <link
       rel="icon"
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2310253f'/%3E%3Cpath d='M32 10c-9 0-16 7-16 16 0 12 16 29 16 29s16-17 16-29c0-9-7-16-16-16Z' fill='%234cc9f0'/%3E%3Ccircle cx='32' cy='26' r='7' fill='white'/%3E%3C/svg%3E"
     />
-    <title>Eesti aadressiotsing</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <link rel="stylesheet" href="styles.css" />
+    <title>Aadressi ilm</title>
   </head>
   <body>
     <main class="page-shell">
       <section class="search-panel" aria-labelledby="page-title">
-        <div class="eyebrow">Maa- ja Ruumiameti ametlikud andmed</div>
-        <h1 id="page-title">Leia aadress ja koordinaadid</h1>
-        <p class="intro">
-          Sisesta Eesti aadress, kohanimi, katastritunnus või ADS OID.
-        </p>
+        <div class="eyebrow">Eesti aadressi ilm</div>
+        <h1 id="page-title">Mis ilm seal praegu on?</h1>
 
         <form id="address-form" class="search-form" novalidate>
           <label for="address">Aadress</label>
@@ -39,7 +39,7 @@
               autofocus
             />
             <button id="search-button" type="submit">
-              <span class="button-label">Otsi aadressi</span>
+              <span class="button-label">Näita ilma</span>
               <span class="button-loader" aria-hidden="true"></span>
             </button>
           </div>
@@ -49,21 +49,30 @@
         <div id="status" class="status" aria-live="polite"></div>
       </section>
 
-      <section id="results" class="results" aria-label="Otsingutulemused" hidden></section>
-
-      <section id="empty-state" class="empty-state" aria-label="Alustamise juhis">
-        <div class="empty-marker" aria-hidden="true">59°N</div>
-        <div>
-          <h2>Valmis otsima kogu Eestist</h2>
-          <p>Tulemuses kuvatakse ametlik aadress, WGS84 ja L-EST97 koordinaadid.</p>
+      <section id="result" class="result" aria-live="polite" hidden>
+        <div class="weather-card">
+          <p class="result-label">Praegune ilm</p>
+          <h2 id="result-address"></h2>
+          <div class="weather-values">
+            <div class="weather-value">
+              <span class="weather-name">Temperatuur</span>
+              <strong id="temperature"></strong>
+            </div>
+            <div class="weather-value">
+              <span class="weather-name">Tuul</span>
+              <strong id="wind"></strong>
+            </div>
+          </div>
         </div>
+        <div id="map" class="map" aria-label="Aadress kaardil"></div>
       </section>
     </main>
 
-    <footer>
-      Andmeallikas: Maa- ja Ruumiameti In-AKS Gazetteer
-    </footer>
-
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script src="app.js" defer></script>
   </body>
 </html>

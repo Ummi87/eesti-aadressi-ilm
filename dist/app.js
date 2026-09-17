@@ -1,53 +1,144 @@
-const API_ENDPOINTS = [
+const ADDRESS_API_ENDPOINTS = [
   "https://aks.geoportaal.ee/inaks/inaadress/gazetteer",
   "https://inaadress.maaamet.ee/inaadress/gazetteer",
 ];
+const WEATHER_API_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+const LAST_ADDRESS_KEY = "eesti-aadressi-ilm:last-address";
 
 const form = document.querySelector("#address-form");
 const addressInput = document.querySelector("#address");
 const searchButton = document.querySelector("#search-button");
 const inputError = document.querySelector("#input-error");
 const status = document.querySelector("#status");
-const results = document.querySelector("#results");
-const emptyState = document.querySelector("#empty-state");
+const result = document.querySelector("#result");
+const resultAddress = document.querySelector("#result-address");
+const temperature = document.querySelector("#temperature");
+const wind = document.querySelector("#wind");
+
+let map;
+let marker;
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  await searchAddress(addressInput.value);
+});
 
-  const query = addressInput.value.trim();
+restoreLastAddress();
+
+async function searchAddress(rawQuery) {
+  const query = rawQuery.trim();
   inputError.textContent = "";
+  addressInput.setAttribute("aria-invalid", "false");
 
   if (query.length < 2) {
     inputError.textContent = "Sisesta vähemalt kaks tähemärki.";
+    addressInput.setAttribute("aria-invalid", "true");
     addressInput.focus();
     return;
   }
 
   setLoading(true);
-  results.hidden = true;
-  emptyState.hidden = true;
+  result.hidden = true;
   status.textContent = `Otsin aadressi „${query}”…`;
 
   try {
-    const data = await requestWithFallback(query);
-    const addresses = Array.isArray(data.addresses) ? data.addresses : [];
+    const address = await findAddress(query);
+    const latitude = Number(address.viitepunkt_b);
+    const longitude = Number(address.viitepunkt_l);
 
-    if (addresses.length === 0) {
-      status.textContent = "Selle sisestusega aadresse ei leitud. Proovi täpsemat aadressi.";
-      emptyState.hidden = false;
-      return;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error("Aadressil puuduvad koordinaadid.");
     }
 
-    renderResults(addresses);
-    status.textContent = `Leitud ${addresses.length} ${addresses.length === 1 ? "aadress" : "aadressi"}.`;
+    status.textContent = "Küsin praegust ilma…";
+    const weather = await fetchCurrentWeather(latitude, longitude);
+    const officialAddress = address.taisaadress || address.pikkaadress || query;
+
+    showResult({ officialAddress, latitude, longitude, weather });
+    saveLastAddress(officialAddress);
+    addressInput.value = officialAddress;
+    status.textContent = "";
   } catch (error) {
     console.error(error);
-    status.textContent = "Aadressiteenusega ei õnnestunud ühendust saada. Proovi hetke pärast uuesti.";
-    emptyState.hidden = false;
+    status.textContent = error.message || "Andmeid ei õnnestunud laadida. Proovi uuesti.";
   } finally {
     setLoading(false);
   }
-});
+}
+
+async function findAddress(query) {
+  let lastError;
+
+  for (const endpoint of ADDRESS_API_ENDPOINTS) {
+    try {
+      const data = await jsonp(endpoint, { address: query }, 12000);
+      const addresses = Array.isArray(data.addresses) ? data.addresses : [];
+
+      if (addresses.length === 0) {
+        throw new Error("Selle sisestusega aadressi ei leitud.");
+      }
+
+      return addresses[0];
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Aadressiteenusega ei õnnestunud ühendust saada.");
+}
+
+async function fetchCurrentWeather(latitude, longitude) {
+  const parameters = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+    current: "temperature_2m,wind_speed_10m",
+    wind_speed_unit: "ms",
+    timezone: "auto",
+  });
+  const response = await fetch(`${WEATHER_API_ENDPOINT}?${parameters.toString()}`);
+
+  if (!response.ok) {
+    throw new Error("Ilmateenusega ei õnnestunud ühendust saada.");
+  }
+
+  const data = await response.json();
+  const current = data.current;
+
+  if (!current || current.temperature_2m == null || current.wind_speed_10m == null) {
+    throw new Error("Ilmateenus ei tagastanud praeguseid andmeid.");
+  }
+
+  return {
+    temperature: current.temperature_2m,
+    temperatureUnit: data.current_units?.temperature_2m || "°C",
+    windSpeed: current.wind_speed_10m,
+    windUnit: data.current_units?.wind_speed_10m || "m/s",
+  };
+}
+
+function showResult({ officialAddress, latitude, longitude, weather }) {
+  resultAddress.textContent = officialAddress;
+  temperature.textContent = `${formatNumber(weather.temperature)} ${weather.temperatureUnit}`;
+  wind.textContent = `${formatNumber(weather.windSpeed)} ${weather.windUnit}`;
+  result.hidden = false;
+  window.requestAnimationFrame(() => updateMap(latitude, longitude, officialAddress));
+}
+
+function updateMap(latitude, longitude, officialAddress) {
+  if (!map) {
+    map = L.map("map", { zoomControl: false }).setView([latitude, longitude], 16);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    marker = L.marker([latitude, longitude]).addTo(map);
+  } else {
+    map.setView([latitude, longitude], 16);
+    marker.setLatLng([latitude, longitude]);
+  }
+
+  map.invalidateSize();
+}
 
 function setLoading(isLoading) {
   searchButton.disabled = isLoading;
@@ -55,18 +146,28 @@ function setLoading(isLoading) {
   addressInput.setAttribute("aria-busy", String(isLoading));
 }
 
-async function requestWithFallback(query) {
-  let lastError;
+function restoreLastAddress() {
+  try {
+    const savedAddress = localStorage.getItem(LAST_ADDRESS_KEY);
+    if (!savedAddress) return;
 
-  for (const endpoint of API_ENDPOINTS) {
-    try {
-      return await jsonp(endpoint, { address: query }, 12000);
-    } catch (error) {
-      lastError = error;
-    }
+    addressInput.value = savedAddress;
+    searchAddress(savedAddress);
+  } catch (error) {
+    console.warn("Viimase aadressi lugemine ebaõnnestus.", error);
   }
+}
 
-  throw lastError || new Error("Aadressiteenus ei vastanud.");
+function saveLastAddress(address) {
+  try {
+    localStorage.setItem(LAST_ADDRESS_KEY, address);
+  } catch (error) {
+    console.warn("Viimase aadressi salvestamine ebaõnnestus.", error);
+  }
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("et-EE", { maximumFractionDigits: 1 }).format(value);
 }
 
 function jsonp(endpoint, parameters, timeoutMs) {
@@ -102,93 +203,10 @@ function jsonp(endpoint, parameters, timeoutMs) {
       settled = true;
       window.clearTimeout(timer);
       cleanUp();
-      reject(new Error("Päring ebaõnnestus."));
+      reject(new Error("Aadressiteenusega ei õnnestunud ühendust saada."));
     };
 
     script.src = `${endpoint}?${query.toString()}`;
     document.head.append(script);
   });
-}
-
-function renderResults(addresses) {
-  results.replaceChildren(...addresses.map(createResultCard));
-  results.hidden = false;
-}
-
-function createResultCard(address, index) {
-  const article = document.createElement("article");
-  article.className = "result-card";
-
-  const resultIndex = document.createElement("div");
-  resultIndex.className = "result-index";
-  resultIndex.textContent = index === 0 ? "Parim vaste" : `Vaste ${index + 1}`;
-
-  const heading = document.createElement("h2");
-  heading.className = "result-address";
-  heading.textContent = address.taisaadress || address.pikkaadress || "Aadress puudub";
-
-  const coordinates = document.createElement("div");
-  coordinates.className = "coordinates";
-  coordinates.append(
-    createCoordinate("WGS84", formatWgs84(address.viitepunkt_b, address.viitepunkt_l)),
-    createCoordinate("L-EST97", formatLest(address.viitepunkt_x, address.viitepunkt_y)),
-  );
-
-  const details = document.createElement("details");
-  const summary = document.createElement("summary");
-  summary.textContent = "Ametlikud tunnused";
-  details.append(summary, createMetadata(address));
-
-  article.append(resultIndex, heading, coordinates, details);
-  return article;
-}
-
-function createCoordinate(label, value) {
-  const box = document.createElement("div");
-  box.className = "coordinate-box";
-
-  const name = document.createElement("span");
-  name.className = "coordinate-label";
-  name.textContent = label;
-
-  const coordinate = document.createElement("span");
-  coordinate.className = "coordinate-value";
-  coordinate.textContent = value;
-
-  box.append(name, coordinate);
-  return box;
-}
-
-function createMetadata(address) {
-  const list = document.createElement("dl");
-  list.className = "metadata";
-
-  const fields = [
-    ["ADS OID", address.ads_oid],
-    ["ADR ID", address.adr_id],
-    ["Objekti liik", address.liikVal],
-    ["Sihtnumber", address.sihtnumber],
-    ["Maakond", address.maakond],
-    ["Omavalitsus", address.omavalitsus],
-  ];
-
-  for (const [label, value] of fields) {
-    const wrapper = document.createElement("div");
-    const term = document.createElement("dt");
-    const description = document.createElement("dd");
-    term.textContent = label;
-    description.textContent = value || "—";
-    wrapper.append(term, description);
-    list.append(wrapper);
-  }
-
-  return list;
-}
-
-function formatWgs84(latitude, longitude) {
-  return latitude && longitude ? `${latitude}, ${longitude}` : "Koordinaadid puuduvad";
-}
-
-function formatLest(x, y) {
-  return x && y ? `X ${x}  ·  Y ${y}` : "Koordinaadid puuduvad";
 }
