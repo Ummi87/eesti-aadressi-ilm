@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="et">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Eesti ametliku aadressi ja koordinaatide otsing Maa- ja Ruumiameti In-AKS teenusest."
+    />
+    <meta name="theme-color" content="#10253f" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2310253f'/%3E%3Cpath d='M32 10c-9 0-16 7-16 16 0 12 16 29 16 29s16-17 16-29c0-9-7-16-16-16Z' fill='%234cc9f0'/%3E%3Ccircle cx='32' cy='26' r='7' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>Eesti aadressiotsing</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="search-panel" aria-labelledby="page-title">
+        <div class="eyebrow">Maa- ja Ruumiameti ametlikud andmed</div>
+        <h1 id="page-title">Leia aadress ja koordinaadid</h1>
+        <p class="intro">
+          Sisesta Eesti aadress, kohanimi, katastritunnus või ADS OID.
+        </p>
+
+        <form id="address-form" class="search-form" novalidate>
+          <label for="address">Aadress</label>
+          <div class="search-row">
+            <input
+              id="address"
+              name="address"
+              type="search"
+              autocomplete="street-address"
+              placeholder="Näiteks Mustamäe tee 51, Tallinn"
+              minlength="2"
+              required
+              autofocus
+            />
+            <button id="search-button" type="submit">
+              <span class="button-label">Otsi aadressi</span>
+              <span class="button-loader" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p id="input-error" class="input-error" role="alert"></p>
+        </form>
+
+        <div id="status" class="status" aria-live="polite"></div>
+      </section>
+
+      <section id="results" class="results" aria-label="Otsingutulemused" hidden></section>
+
+      <section id="empty-state" class="empty-state" aria-label="Alustamise juhis">
+        <div class="empty-marker" aria-hidden="true">59°N</div>
+        <div>
+          <h2>Valmis otsima kogu Eestist</h2>
+          <p>Tulemuses kuvatakse ametlik aadress, WGS84 ja L-EST97 koordinaadid.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Andmeallikas: Maa- ja Ruumiameti In-AKS Gazetteer
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
